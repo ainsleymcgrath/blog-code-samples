@@ -3,11 +3,12 @@ from code_under_test import is_bread, is_bread_db
 import pytest
 from sqlite3 import Connection, connect
 
-# the function under test
+# the function under test -- no fixtures
 def is_bread(thing: str) -> bool:
     return thing == "bread"
 
 
+# our first fixture!
 # using this decorator 'registers' the function as a fixture
 @pytest.fixture
 def non_bread() -> str:
@@ -22,6 +23,7 @@ def test_is_bread(non_bread):
     ), "When passed a non-bread function returns False"
 
 
+# fixtures can do much more than provide primitive values
 @pytest.fixture
 def testconn() -> Connection:
     # this is setup
@@ -42,6 +44,7 @@ def testconn() -> Connection:
     connection.close()
 
 
+# `testconn()` execution is suspended, its `yield` is passed as an arg here
 def test_is_bread_db(testconn: Connection):
     assert is_bread_db(testconn, "bread") is True, "Bread is bread"
     assert is_bread_db(testconn, "mirth") is False, "Mirth is not bread"

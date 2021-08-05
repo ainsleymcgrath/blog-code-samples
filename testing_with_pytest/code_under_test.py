@@ -1,9 +1,14 @@
+from sqlite3 import Connection
+
+
+####################
+# PART 1: FIXTURES #
+####################
+
+
 def is_bread(thing: str) -> bool:
     """Predicate: Determine if incoming `thing` is bread."""
     return thing == "bread"
-
-
-from sqlite3 import Connection
 
 
 def is_bread_db(connection: Connection, thing_name: str) -> bool:
