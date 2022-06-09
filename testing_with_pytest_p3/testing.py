@@ -14,8 +14,10 @@ class CrudFunc(Protocol):
 
 @dataclass
 class CrudCase:
+    UNSET: ClassVar = object()
+
     should: str
-    assert_return: Any
+    assert_return: Any = UNSET
     func: CrudFunc | None = None
 
     args: tuple[Any, ...] = field(default_factory=tuple)
@@ -28,6 +30,10 @@ class CrudCase:
     TEST_MODULE_NAME_PATTERN: ClassVar[re.Pattern] = re.compile(
         r"test_(?P<func_name>\w.*)"
     )
+
+    def __post_init__(self):
+        if self.assert_return is self.UNSET and self.raises is None:
+            raise ValueError("If not specifying raises, must specify assert_return.")
 
     def call(self) -> Any:
         if self.func is None:

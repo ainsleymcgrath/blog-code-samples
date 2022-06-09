@@ -3,13 +3,21 @@ from sqlite3 import Connection, Row
 from typing import Any
 
 
+class NoRecordFoundError(Exception):
+    ...
+
+
 def is_bread(conn: Connection, thing_name: str) -> bool:
     cursor = conn.execute(
         # in sqlite, `?` is used as a placeholder
         "select is_bread from things where name = ?",
         (thing_name,),
     )
-    (result,) = cursor.fetchone()
+    try:
+        (result,) = cursor.fetchone()
+    except TypeError as e:
+        raise NoRecordFoundError from e
+
     return result == 1  # sqlite uses 1/0 for True/False
 
 
