@@ -2,23 +2,22 @@ import re
 from importlib import import_module
 from dataclasses import dataclass, field, fields
 from sqlite3 import Connection
-from typing import Any, ClassVar, Protocol, Type
+from typing import Any, Callable, ClassVar, Type
 
 
-class CrudFunc(Protocol):
-    __name__: str
+class TestSetupSetupError(Exception):
+    ...
 
-    def __call__(self, connection: Connection, *args: Any, **kwargs: Any):
-        ...
+
+class TestRunError(Exception):
+    ...
 
 
 @dataclass
 class CrudCase:
-    UNSET: ClassVar = object()
-
     should: str
-    assert_return: Any = UNSET
-    func: CrudFunc | None = None
+    assert_return: Any = ...
+    func: Callable[..., Any] | None = None
 
     args: tuple[Any, ...] = field(default_factory=tuple)
     kwargs: dict[str, Any] = field(default_factory=dict)
@@ -27,18 +26,23 @@ class CrudCase:
     seed_data: list[tuple] = field(default_factory=list)
     table: list["CrudCase"] = field(default_factory=list)
 
+    SKIPCHECK: ClassVar = object()
     TEST_MODULE_NAME_PATTERN: ClassVar[re.Pattern] = re.compile(
         r"test_(?P<func_name>\w.*)"
     )
 
     def __post_init__(self):
-        if self.assert_return is self.UNSET and self.raises is None:
-            raise ValueError("If not specifying raises, must specify assert_return.")
+        if self.kwargs is None:
+            self.kwargs = {}
+        if self.assert_return is ... and self.raises is None:
+            raise TestSetupSetupError(
+                "If not specifying raises, must specify assert_return."
+            )
 
     def call(self) -> Any:
         if self.func is None:
-            raise TypeError("No func given :/")
-        return self.func(*self.args, *self.kwargs)
+            raise TestRunError("No func assigned. Can't do anything.")
+        return self.func(*self.args, **self.kwargs)
 
     @classmethod
     def from_module(
@@ -60,7 +64,10 @@ class CrudCase:
             *_, stem = module.__name__.split(".")
             match = cls.TEST_MODULE_NAME_PATTERN.search(stem)
             if match is None:
-                raise AttributeError
+                raise TestSetupSetupError(
+                    "Couldn't derive func name from module name."
+                    " Please fix filename or pass func explicitly."
+                )
             func_name = match.group("func_name")
             kwargs["func"] = getattr(import_module(func_location), func_name)
 
@@ -74,7 +81,7 @@ class CrudCase:
 @dataclass
 class CrudCaseArtifact:
     case: CrudCase
-    actual_result: Any
+    actual_result: Any = None
 
 
 @dataclass

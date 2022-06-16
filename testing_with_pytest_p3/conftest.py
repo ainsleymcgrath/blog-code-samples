@@ -1,5 +1,6 @@
 import pytest
 from sqlite3 import Connection, connect
+from typing import Callable
 
 from .testing import CrudCase, CrudCaseArtifact, ThingSeeder
 
@@ -30,9 +31,13 @@ def seeder(testconn: Connection):
     return ThingSeeder(testconn)
 
 
+CaseRunner = Callable[[CrudCase], CrudCaseArtifact]
+
+
 @pytest.fixture
 def run_crud_case(seeder: ThingSeeder, testconn: Connection):
-    def run(case: CrudCase):
+    def run(case: CrudCase) -> CrudCaseArtifact:
+        artifact = CrudCaseArtifact(case=case)
         seeder.seed(case.seed_data)
 
         if (exc := case.raises) is not None:
@@ -40,7 +45,9 @@ def run_crud_case(seeder: ThingSeeder, testconn: Connection):
                 case.call()
         else:
             actual_result = case.call()
-            assert case.assert_return == actual_result, case.should
+            artifact.actual_result = actual_result
+            if not case.assert_return is case.SKIPCHECK:
+                assert case.assert_return == actual_result, case.should
 
         for assertion_query in case.assert_sql:
             cursor = testconn.execute(assertion_query)
@@ -52,29 +59,36 @@ def run_crud_case(seeder: ThingSeeder, testconn: Connection):
                 )
 
             assert only_result == 1, f"{assertion_query} returns `true`"
+        return artifact
 
     return run
 
 
 @pytest.fixture
-def crud_case(run_crud_case, testconn: Connection, case: CrudCase):
+def crud_case(
+    run_crud_case: CaseRunner, testconn: Connection, case: CrudCase
+) -> CrudCaseArtifact:
     """When requested, this fixture inspects the requesting module and generates
     tests accordingly."""
     case.args = (testconn, *case.args)
-    result = run_crud_case(case)
-    return CrudCaseArtifact(actual_result=result, case=case)
+    return run_crud_case(case)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc):
     if "crud_case" in metafunc.fixturenames:
-        parent_case = CrudCase.from_module(metafunc.module)
+        root_case = CrudCase.from_module(metafunc.module)
+
+        if root_case.table == []:
+            metafunc.parametrize("case", [root_case], ids=[root_case.testid()])
+            return
+
         module_seed_data = getattr(metafunc.module, "seed_data", [])
-        for case in parent_case.table:
+        for case in root_case.table:
             if case.seed_data == []:
                 case.seed_data = module_seed_data
 
             if case.func is None:
-                case.func = parent_case.func
+                case.func = root_case.func
 
-        cases = parent_case.table if parent_case.table != [] else [parent_case]
+        cases = root_case.table if root_case.table != [] else [root_case]
         metafunc.parametrize("case", cases, ids=[c.testid() for c in cases])
